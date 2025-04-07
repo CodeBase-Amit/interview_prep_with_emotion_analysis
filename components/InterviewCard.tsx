@@ -51,7 +51,7 @@ const InterviewCard = async ({ id, userId, role, type, techstack, createdAt }: I
                   </p>
               </div>
 
-                <div className="flex flex-row justify-between">
+                <div className="flex flex-row justify-between mt-4">
                     <DisplayTechIcons techStack={techstack} />
 
                     <Button className="btn-primary">

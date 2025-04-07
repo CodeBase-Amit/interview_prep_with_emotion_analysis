@@ -106,4 +106,6 @@ interface SentimentData {
   emotion: string;
   confidence: number;
   transcript: string;
+  score?: number;
+  magnitude?: number;
 }

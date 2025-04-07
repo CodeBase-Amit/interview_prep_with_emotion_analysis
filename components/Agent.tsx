@@ -7,7 +7,7 @@ import {useEffect, useState} from "react";
 import { vapi } from '@/lib/vapi.sdk';
 import {interviewer} from "@/constants";
 import {createFeedback} from "@/lib/actions/general.action";
-import {analyzeSentiment} from "@/lib/utils";
+import {analyzeSentiment} from "@/lib/sentiment-local";
 
 enum CallStatus {
     INACTIVE = 'INACTIVE',
@@ -42,12 +42,15 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
                 // Only analyze sentiment for user responses
                 if (message.role === 'user') {
                     try {
-                        const { emotion, confidence } = await analyzeSentiment(message.transcript);
+                        // Analyze sentiment using our local implementation
+                        const { emotion, confidence, score, magnitude } = analyzeSentiment(message.transcript);
                         
                         const newSentimentData: SentimentData = {
                             timestamp: new Date().toISOString(),
                             emotion,
                             confidence,
+                            score,
+                            magnitude,
                             transcript: message.transcript
                         };
                         
