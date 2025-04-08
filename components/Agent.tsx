@@ -3,11 +3,14 @@
 import Image from "next/image";
 import {cn} from "@/lib/utils";
 import {useRouter} from "next/navigation";
-import {useEffect, useState} from "react";
+import {useEffect, useState, useRef} from "react";
 import { vapi } from '@/lib/vapi.sdk';
 import {interviewer} from "@/constants";
 import {createFeedback} from "@/lib/actions/general.action";
 import {analyzeSentiment} from "@/lib/sentiment-local";
+import {analyzeSpeech, SpeechAnalysisResult} from "@/lib/speech-analysis";
+import SpeechFeedback from "@/components/SpeechFeedback";
+import { generateDetailedFeedback } from '@/lib/feedback-generator';
 
 enum CallStatus {
     INACTIVE = 'INACTIVE',
@@ -28,7 +31,13 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
     const [messages, setMessages] = useState<SavedMessage[]>([]);
     const [sentimentData, setSentimentData] = useState<SentimentData[]>([]);
     const [currentEmotion, setCurrentEmotion] = useState<string>('neutral');
-
+    const [speechAnalysis, setSpeechAnalysis] = useState<SpeechAnalysisResult | null>(null);
+    const [showSpeechFeedback, setShowSpeechFeedback] = useState(false);
+    
+    // Refs for speech timing
+    const speechStartTimeRef = useRef<number | null>(null);
+    const isUserSpeakingRef = useRef(false);
+    
     useEffect(() => {
         const onCallStart = () => setCallStatus(CallStatus.ACTIVE);
         const onCallEnd = () => setCallStatus(CallStatus.FINISHED);
@@ -42,6 +51,13 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
                 // Only analyze sentiment for user responses
                 if (message.role === 'user') {
                     try {
+                        // Stop tracking speech time
+                        isUserSpeakingRef.current = false;
+                        const speechEndTime = Date.now();
+                        const speechDuration = speechStartTimeRef.current 
+                            ? speechEndTime - speechStartTimeRef.current 
+                            : 5000; // fallback to 5 seconds
+                        
                         // Analyze sentiment using our local implementation
                         const { emotion, confidence, score, magnitude } = analyzeSentiment(message.transcript);
                         
@@ -56,15 +72,37 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
                         
                         setSentimentData(prev => [...prev, newSentimentData]);
                         setCurrentEmotion(emotion);
+                        
+                        // Analyze speech when message is sent from user
+                        analyzeUserSpeech(message.transcript, speechDuration);
                     } catch (error) {
                         console.error('Failed to analyze sentiment:', error);
                     }
+                } else {
+                    // If the assistant is done speaking, prepare for user's speech
+                    speechStartTimeRef.current = null;
+                    setShowSpeechFeedback(false);
                 }
             }
         }
 
-        const onSpeechStart = () => setIsSpeaking(true);
-        const onSpeechEnd = () => setIsSpeaking(false);
+        const onSpeechStart = () => {
+            setIsSpeaking(true);
+            // If user starts speaking, record the time
+            // Since vapi doesn't expose a clear way to check whose turn it is,
+            // we'll use the messages array state to determine
+            const lastMessage = messages[messages.length - 1];
+            const isUserTurn = lastMessage?.role === 'assistant' || messages.length === 0;
+            
+            if (isUserTurn) {
+                isUserSpeakingRef.current = true;
+                speechStartTimeRef.current = Date.now();
+            }
+        };
+        
+        const onSpeechEnd = () => {
+            setIsSpeaking(false);
+        };
 
         const onError = (error: Error) => console.log('Error', error);
 
@@ -83,7 +121,7 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
             vapi.off('speech-end', onSpeechEnd);
             vapi.off('error', onError)
         }
-    }, [])
+    }, [messages])
 
     const handleGenerateFeedback = async (messages: SavedMessage[]) => {
         console.log('Generate feedback here.');
@@ -112,7 +150,7 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
                 handleGenerateFeedback(messages);
             }
         }
-    }, [messages, callStatus, type, userId]);
+    }, [messages, callStatus, type, userId, router, interviewId]);
 
     const handleCall = async () => {
         setCallStatus(CallStatus.CONNECTING);
@@ -162,6 +200,36 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
         }
     };
 
+    // Analyze speech when message is sent from user
+    const analyzeUserSpeech = (text: string, speechDuration: number) => {
+        // Basic sentiment detection (this is simplified, in reality we would use NLP)
+        let sentiment = 'neutral';
+        
+        // Simple sentiment detection based on keywords
+        const lowerText = text.toLowerCase();
+        if (lowerText.includes('nervous') || lowerText.includes('anxious') || lowerText.includes('worry')) {
+            sentiment = 'anxious';
+        } else if (lowerText.includes('confus') || lowerText.includes('not sure') || lowerText.includes('unclear')) {
+            sentiment = 'confused';
+        } else if (lowerText.includes('happy') || lowerText.includes('excite') || lowerText.includes('look forward')) {
+            sentiment = 'happy';
+        } else if (lowerText.includes('confident') || lowerText.includes('certain') || lowerText.includes('sure')) {
+            sentiment = 'confident';
+        } else if (lowerText.includes('uncertain') || lowerText.includes('maybe') || lowerText.includes('probably')) {
+            sentiment = 'uncertain';
+        }
+        
+        // Analyze speech pattern
+        const analysis = analyzeSpeech(text, speechDuration, sentiment);
+        
+        // Generate detailed feedback
+        const detailedFeedback = generateDetailedFeedback(analysis);
+        analysis.feedback = detailedFeedback;
+        
+        setSpeechAnalysis(analysis);
+        setShowSpeechFeedback(true);
+    };
+
     return (
         <>
         <div className="call-view">
@@ -199,8 +267,16 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
                     </div>
                 </div>
             )}
+            
+            {/* Speech Analysis Feedback */}
+            {showSpeechFeedback && speechAnalysis && (
+                <SpeechFeedback 
+                    analysis={speechAnalysis} 
+                    onDismiss={() => setShowSpeechFeedback(false)} 
+                />
+            )}
 
-            <div className="w-full flex justify-center">
+            <div className="w-full flex justify-center mt-4">
                 {callStatus !== 'ACTIVE' ? (
                     <button className="relative btn-call" onClick={handleCall}>
                         <span className={cn('absolute animate-ping rounded-full opacity-75', callStatus !=='CONNECTING' && 'hidden')}
@@ -219,4 +295,5 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
         </>
     )
 }
+
 export default Agent
