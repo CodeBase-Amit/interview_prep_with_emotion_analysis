@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import SentimentDisplay from "@/components/SentimentDisplay";
+import QuestionAnswerFeedback from "@/components/QuestionAnswerFeedback";
 
 const Page = async ({ params }: RouteParams) => {
     const { id } = await params;
@@ -60,11 +61,11 @@ const Page = async ({ params }: RouteParams) => {
 
             <p>{feedback?.finalAssessment}</p>
 
-            <div className="flex flex-col gap-4">
-                <h2>Breakdown of the Interview:</h2>
+            <div className="flex flex-col gap-4 mt-6">
+                <h2 className="text-xl font-semibold">Breakdown of the Interview:</h2>
                 {feedback?.categoryScores?.map((category, index) => (
-                    <div key={index}>
-                        <p className="font-bold">
+                    <div key={index} className="bg-dark-200 p-4 rounded-lg">
+                        <p className="font-bold text-lg">
                             {index + 1}. {category.name} ({category.score}/100)
                         </p>
                         <p>{category.comment}</p>
@@ -78,25 +79,45 @@ const Page = async ({ params }: RouteParams) => {
                 </div>
             )}
 
-            <div className="flex flex-col gap-3">
-                <h3>Strengths</h3>
-                <ul>
+            {/* Question and Answer Review Section */}
+            {feedback?.questionsAndAnswers && feedback.questionsAndAnswers.length > 0 && (
+                <div className="flex flex-col gap-4 mt-6">
+                    <h2 className="text-xl font-semibold">Interview Questions and Answers</h2>
+                    <div className="flex flex-col gap-4">
+                        {feedback.questionsAndAnswers.map((qa, index) => (
+                            <QuestionAnswerFeedback 
+                                key={index} 
+                                questionNumber={index + 1}
+                                question={qa.question}
+                                answer={qa.answer}
+                                sentimentScore={qa.sentimentScore}
+                                speechAnalysis={qa.speechAnalysis}
+                                idealAnswer={qa.idealAnswer}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            <div className="flex flex-col gap-3 mt-6">
+                <h3 className="text-lg font-semibold">Strengths</h3>
+                <ul className="list-disc pl-5 space-y-2">
                     {feedback?.strengths?.map((strength, index) => (
                         <li key={index}>{strength}</li>
                     ))}
                 </ul>
             </div>
 
-            <div className="flex flex-col gap-3">
-                <h3>Areas for Improvement</h3>
-                <ul>
+            <div className="flex flex-col gap-3 mt-4">
+                <h3 className="text-lg font-semibold">Areas for Improvement</h3>
+                <ul className="list-disc pl-5 space-y-2">
                     {feedback?.areasForImprovement?.map((area, index) => (
                         <li key={index}>{area}</li>
                     ))}
                 </ul>
             </div>
 
-            <div className="buttons">
+            <div className="buttons mt-8">
                 <Button className="btn-secondary flex-1">
                     <Link href="/" className="flex w-full justify-center">
                         <p className="text-sm font-semibold text-primary-200 text-center">

@@ -1,3 +1,31 @@
+interface SentimentScore {
+  score: number;
+  emotion: string;
+  confidence: number;
+}
+
+interface SpeechAnalysis {
+  fillerWords: {
+    total: number;
+    details: Record<string, number>;
+  };
+  wordCount: number;
+  clarity: string;
+  tone: string;
+  avgWordsPerSentence: number;
+}
+
+interface QuestionAnswerPair {
+  question: string;
+  answer: string;
+  sentimentScore: SentimentScore | null;
+}
+
+interface EnhancedQuestionAnswerPair extends QuestionAnswerPair {
+  speechAnalysis?: SpeechAnalysis;
+  idealAnswer?: string;
+}
+
 interface Feedback {
   id: string;
   interviewId: string;
@@ -12,6 +40,7 @@ interface Feedback {
   finalAssessment: string;
   createdAt: string;
   sentimentAnalysis?: SentimentData[];
+  questionsAndAnswers?: EnhancedQuestionAnswerPair[];
 }
 
 interface Interview {
